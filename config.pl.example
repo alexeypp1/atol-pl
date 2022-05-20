@@ -1,0 +1,39 @@
+
+use utf8;
+
+%db_conf = (
+	db_host	=>	"хост",
+	db_login	=>	'логин',
+	db_password	=>	'пароль',
+	db_name	=>	"имя_базы"
+);
+
+%patch_conf = (
+	patch_to_qrcode		=>	'полный системный путь к папке где будут создаваться картинки qrcode',
+);
+
+%atol_conf = (
+	atol_login		=>	'логин для API Атол',
+	atol_password	=>	'пароль для API Атол',
+	atol_group_code	=>	'код группы для API Атол'
+);
+
+%company_conf = (
+	company_name			=>	'ООО \'название компании\'',
+	company_email_official	=> 'office@example.ru',
+	company_email_noreply	=> 'noreply@example.ru',
+	company_inn				=>	'ИНН организации',
+	company_sno				=>	'usn_income_outcome',  # вид УСН usn_income_outcome -доходы минус расходы
+	company_payment_address	=>	'http://example.ru, # адрес сайта на котором компания получает платежи
+	company_callback_url	=> '',
+	company_address			=> 'адрес компании, город улица дом...'
+
+);
+
+%mailserver_conf = (
+	mailserver_host			=> 'mail.example.ru',
+	mailserver_username		=> 'noreply@example.ru',
+	mailserver_userpassword	=> 'пароль',
+	mailserver_emailfrom		=> 'noreply@example.ru',
+	mailserver_emailsubject		=> 'ООО \'название компании\' Кассовый чек'
+);
