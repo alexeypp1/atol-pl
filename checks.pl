@@ -10,6 +10,10 @@ use Data::Dumper;
 use JSON;
 use Time::Piece;
 use Email::Valid;
+use MIME::Lite;
+use Net::SMTPS;
+use Net::SMTP;
+use Imager::QRCode;
 
 use atol;
 
@@ -19,11 +23,6 @@ binmode(STDIN,':utf8');
 
 
 do "./config.pl";
-use vars qw(%db_conf);
-use vars qw(%atol_conf);
-use vars qw(%company_conf);
-use vars qw(%mailserver_conf);
-use vars qw(%patch_conf);
 
 my $atol_token = "-";
 my $atol_error = '';
@@ -34,7 +33,7 @@ my $unixtime = $time->epoch;
 my $unixtime_3dayago = $unixtime - (60*60*24*3);
 
 
-my $dbh = DBI->connect("DBI:mysql:dbname=$db_conf{db_name}:hostname=$db_conf{db_host}",$db_conf{db_login},$db_conf{db_password}) or die ("db not connect");
+my $dbh = DBI->connect("DBI:mysql:dbname=$Config::db_conf{db_name}:hostname=$Config::db_conf{db_host}",$Config::db_conf{db_login},$Config::db_conf{db_password}) or die ("db not connect");
 
 
 
@@ -98,7 +97,7 @@ if($sth3->rows) {
 	print "We have data for Atol!\n" if DEBUG;
 	
 	# получаем у АТОЛ токен для текущего сеанса
-	($atol_error, $atol_token, $atol_message) = &get_token( $atol_conf{atol_login}, $atol_conf{atol_password});
+	($atol_error, $atol_token, $atol_message) = &get_token( $Config::atol_conf{atol_login}, $Config::atol_conf{atol_password});
 
 	if ( $atol_error == 1 ) {
 		print "atol_error $atol_error ERROR CODE $atol_message->{error}->{code}" if DEBUG;
@@ -121,10 +120,10 @@ while ( my @row3 = $sth3->fetchrow_array ) {
 	$payer_telephone = convert_phonenumber($payer_telephone);
 
 	# если нет валидных координат плательщика то отдаем Атолу noreply адрес организации т.к. Атол не регистрирует документы без данных плательщика
-	if ( $payer_email eq '' and $payer_telephone eq '' ) { $payer_email = "$company_conf{company_email_noreply}"; }
+	if ( $payer_email eq '' and $payer_telephone eq '' ) { $payer_email = "$Config::company_conf{company_email_noreply}"; }
 
 	# отправляем в Атол данные для регистрации документа (чека)
-	$atol_uuid = &send_check ($atol_token, $payment_id, $payer_email, $payer_telephone, $amount, $atol_conf{atol_group_code}, %company_conf);
+	$atol_uuid = &send_check ($atol_token, $payment_id, $payer_email, $payer_telephone, $amount, $Config::atol_conf{atol_group_code}, %Config::company_conf);
 
 	if ( $atol_uuid ne '' ) {
 		my $sql4 = "UPDATE rm_atol
@@ -165,7 +164,7 @@ $sth5->execute() or die "Couldn't execute statement: ".$sth5->errstr.print "\n s
 if($sth5->rows) {
 	print "We wait data from Atol!\n" if DEBUG;
 	# получаем у Атол токен для текущего сеанса
-	($atol_error, $atol_token, $atol_message) = &get_token( $atol_conf{atol_login}, $atol_conf{atol_password});
+	($atol_error, $atol_token, $atol_message) = &get_token( $Config::atol_conf{atol_login}, $Config::atol_conf{atol_password});
 	if ( $atol_error == 1 ) {
 		print "atol_error $atol_error ERROR CODE $atol_message->{error}->{code}";
 		die "ERROR no token";
@@ -184,7 +183,7 @@ while ( my @row5 = $sth5->fetchrow_array ) {
 
 	print "get from Atol payment_id $payment_id \n" if DEBUG;
 	# запрашиваем у Атол данные по ранее отправленным и зарегистрированным им документам (чекам)
-	my ($error_get, $message) = &get_check_status($atol_token, $atol_uuid, $atol_conf{atol_group_code});
+	my ($error_get, $message) = &get_check_status($atol_token, $atol_uuid, $Config::atol_conf{atol_group_code});
 
 	if ( $error_get == 0 ) {
 		my $mreceipt_datetime = Time::Piece->strptime($message->{payload}->{receipt_datetime}, "%d.%m.%Y %H:%M:%S");
@@ -260,8 +259,7 @@ sub convert_phonenumber {
 
 
 sub create_qrcode {
-     my ( $qrcode_id, $qrcode_text ) = @_;
-    use Imager::QRCode;
+	my ( $qrcode_id, $qrcode_text ) = @_;
     my $qrcode = Imager::QRCode->new(
     size          => 2,
     margin        => 2,
@@ -272,7 +270,7 @@ sub create_qrcode {
     darkcolor     => Imager::Color->new(0, 0, 0),
     );
     my $img = $qrcode->plot($qrcode_text);
-    $img->write(file => "$patch_conf{patch_to_qrcode}qrcode-$qrcode_id.bmp")
+    $img->write(file => "$Config::patch_conf{patch_to_qrcode}qrcode-$qrcode_id.bmp")
          or die "Failed to write: " . $img->errstr;
 
 	return 1;
@@ -303,9 +301,9 @@ sub make_text_for_email {
     <table width="100%" border="2" bordercolor="$color1" valign="top" align="center" cellpadding="10" cellspacing="0" bgcolor="$color2">
     <tr valign="top"><td align="center" valign="top" width="70%">
     <font face="Arial, Helvetica, sans-serif" size="2">
-    <br>$company_conf{company_name}
-    <br>ИНН $company_conf{company_inn}
-    <br>$company_conf{company_address}
+    <br>$Config::company_conf{company_name}
+    <br>ИНН $Config::company_conf{company_inn}
+    <br>$Config::company_conf{company_address}
     </font>
     $font4<br><br>КАССОВЫЙ ЧЕК. Приход.</font>
     <br><br>
@@ -367,13 +365,13 @@ sub make_text_for_email {
     <td align="right" valign="top">$font2 УСН доходы минус расходы</td></tr>
     <tr valign="top" >
     <td align="left" valign="top" width="50%">$font2 Место расчетов</td>
-    <td align="right" valign="top">$font2 $company_conf{company_payment_address}</td></tr>
+    <td align="right" valign="top">$font2 $Config::company_conf{company_payment_address}</td></tr>
     <tr valign="top" >
     <td align="left" valign="top" width="50%">$font2 Эл. адрес покупателя</td>
     <td align="right" valign="top">$font2 $payer_email</td></tr>
     <tr valign="top" >
     <td align="left" valign="top" width="50%">$font2 Эд. адрес отправителя</td>
-    <td align="right" valign="top">$font2 $company_conf{company_email_official}</td></tr>
+    <td align="right" valign="top">$font2 $Config::company_conf{company_email_official}</td></tr>
     <tr valign="top" >
     <td align="left" valign="top" width="50%">$font2 Сайт ФНС</td>
     <td align="right" valign="top">$font2 https://www.nalog.ru</td></tr>
@@ -393,14 +391,10 @@ sub make_text_for_email {
 sub send_check_to_email {
     my ($to_email, $text_for_email, $qrcode_id ) = @_;
 
-	use MIME::Lite;
-	use Net::SMTPS;
-	use Net::SMTP;
-
     my $mail = MIME::Lite->new(
-            From    => $mailserver_conf{mailserver_emailfrom},
+            From    => $Config::mailserver_conf{mailserver_emailfrom},
             To      => $to_email,
-            Subject => Encode::encode_utf8($mailserver_conf{mailserver_emailsubject}),
+            Subject => Encode::encode_utf8($Config::mailserver_conf{mailserver_emailsubject}),
             Type    => 'multipart/mixed'
     );
     $mail->attach(
@@ -410,12 +404,12 @@ sub send_check_to_email {
     $mail->attach(
             Type     => 'image/bmp',
             Id   => "qrcode-$qrcode_id.bmp",
-            Path     => "$patch_conf{patch_to_qrcode}qrcode-$qrcode_id.bmp",
+            Path     => "$Config::patch_conf{patch_to_qrcode}qrcode-$qrcode_id.bmp",
     );
 
-    my $smtps = Net::SMTPS->new($mailserver_conf{mailserver_host}, Port => 25,  doSSL => 'login', Debug=>0);
-	$smtps ->auth($mailserver_conf{mailserver_username}, $mailserver_conf{mailserver_userpassword});
-    $smtps ->mail($mailserver_conf{mailserver_emailfrom});
+    my $smtps = Net::SMTPS->new($Config::mailserver_conf{mailserver_host}, Port => 25,  doSSL => 'login', Debug=>0);
+	$smtps ->auth($Config::mailserver_conf{mailserver_username}, $Config::mailserver_conf{mailserver_userpassword});
+    $smtps ->mail($Config::mailserver_conf{mailserver_emailfrom});
     $smtps->to($to_email);
     $smtps->data();
     $smtps->datasend( $mail->as_string() );

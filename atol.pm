@@ -1,5 +1,7 @@
 
+
 package atol;
+
 
 use constant DEBUG => 0;
 use Exporter 'import';
@@ -12,7 +14,9 @@ use Time::Piece;
 use utf8;
 
 
-#	v 1.00
+
+
+#	v 1.0.1
 #	Неофициальный Perl Modile для работы с онлайн-кассами Атол (www.atol.ru) по API v 4.11
 #
 #	Модуль регистрирует в ККТ документы простейшего вида способом расчета 'Полный расчет', с количество=1 единица измерения='шт.'
@@ -53,7 +57,7 @@ sub get_token {
 
     my $lwp = LWP::UserAgent->new;
     my $res = $lwp->request( $req );
-    my $atol_message = $res->decoded_content;
+    $atol_message = $res->decoded_content;
     $atol_message = decode_json($atol_message);
 
     if ( !defined($atol_message->{error}) ) {
@@ -123,7 +127,7 @@ sub send_check {
 	my $res = $ua->request( $req );
 
     my $message = $res->decoded_content;
-    $message = decode_json($message);
+    $message = decode_json($message) or print Dumper $message;
 
 	print "\n----------------\n"  if DEBUG;
 	print Dumper $message if DEBUG;
